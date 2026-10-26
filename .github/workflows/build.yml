@@ -10,11 +10,23 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Debug - show repo contents
+        shell: bash
+        run: |
+          pwd
+          ls -la
+          git log -1 --oneline
+          echo "Python files found:"
+          find . -name "*.py" -not -path "./.git/*" | head -n 50
 
       - name: Securely download game, update, and keys
         shell: bash
@@ -60,8 +72,22 @@ jobs:
           ls -lh build_stage
 
       - name: Build IPA
+        shell: bash
         run: |
-          python3 scripts/build_ipa_from_nsp.py build_stage -k build_stage/prod.keys
+          set -euo pipefail
+
+          # Use scripts/build_ipa_from_nsp.py if present, otherwise search the repo
+          SCRIPT="scripts/build_ipa_from_nsp.py"
+          if [ ! -f "$SCRIPT" ]; then
+            SCRIPT=$(find . -iname "build_ipa_from_nsp.py" -not -path "./.git/*" | head -n1)
+          fi
+          if [ -z "$SCRIPT" ] || [ ! -f "$SCRIPT" ]; then
+            echo "::error::build_ipa_from_nsp.py is not in this commit. Check it is committed, not gitignored, and that the right branch/submodule is checked out."
+            exit 1
+          fi
+
+          echo "Using script: $SCRIPT"
+          python3 "$SCRIPT" build_stage -k build_stage/prod.keys
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
@@ -73,5 +99,6 @@ jobs:
 
       - name: Clean up sensitive files
         if: always()
+        shell: bash
         run: |
           rm -rf build_stage
