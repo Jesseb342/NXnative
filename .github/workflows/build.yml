@@ -36,6 +36,13 @@ jobs:
           echo "Fetching Update NSP..."
           curl -L -o build_stage/update.nsp "$UPDATE_URL"
 
+      - name: Inspect Downloaded Files (Debug)
+        run: |
+          echo "--- Directory contents and file sizes ---"
+          ls -lh build_stage/
+          echo "--- File types ---"
+          file build_stage/*
+
       - name: Run Build and Packaging Script
         run: |
           python3 scripts/build_ipa_from_nsp.py build_stage -k build_stage/prod.keys
