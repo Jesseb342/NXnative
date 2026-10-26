@@ -8,8 +8,10 @@ jobs:
     runs-on: macos-latest
     
     steps:
-      - name: Checkout Repository
+      - name: Checkout NX2Apple Repository
         uses: actions/checkout@v4
+        with:
+          repository: LNPANDY/NX2Apple
 
       - name: Install Build Toolchain & Dependencies
         run: |
