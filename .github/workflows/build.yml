@@ -8,9 +8,13 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
+      # Checks out the repo that contains the project and scripts/build_ipa_from_nsp.py
+      - name: Checkout source project
         uses: actions/checkout@v4
         with:
+          repository: OWNER/NXnative
+          ref: main
+          token: ${{ secrets.GH_PAT || github.token }}
           submodules: recursive
           fetch-depth: 0
 
@@ -19,7 +23,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Debug - show repo contents
+      - name: Debug - show what was checked out
         shell: bash
         run: |
           pwd
@@ -93,7 +97,7 @@ jobs:
             SCRIPT=$(find . -iname "build_ipa_from_nsp.py" -not -path "./.git/*" | head -n1)
           fi
           if [ -z "$SCRIPT" ] || [ ! -f "$SCRIPT" ]; then
-            echo "::error::build_ipa_from_nsp.py is not in this commit."
+            echo "::error::build_ipa_from_nsp.py not found in the checked-out source project."
             exit 1
           fi
 
