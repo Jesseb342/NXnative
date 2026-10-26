@@ -1,4 +1,23 @@
+name: Build IPA from NSP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Securely download game, update, and keys
+        shell: bash
         env:
           GAME_URL: ${{ secrets.Game_URL }}
           UPDATE_URL: ${{ secrets.Update_URL }}
@@ -14,6 +33,7 @@
               echo "::error::Secret for $name is empty or not passed to this step"
               exit 1
             fi
+
             # Works for /d/ID/view links and uc?id=ID / download?id=ID links
             local id
             id=$(echo "$url" | sed -nE 's#.*/d/([A-Za-z0-9_-]+).*#\1#p; s#.*[?&]id=([A-Za-z0-9_-]+).*#\1#p' | head -n1)
@@ -22,7 +42,9 @@
               exit 1
             fi
             echo "$name: file ID has ${#id} characters"
+
             gdown "https://drive.google.com/uc?id=$id" -O "$out"
+
             if head -c 1024 "$out" | grep -qiE '<html|<!doctype'; then
               echo "::error::$name downloaded as an HTML page, not the real file"
               exit 1
@@ -33,3 +55,23 @@
           fetch Keys   "$KEYS_URL"   build_stage/prod.keys
           fetch Game   "$GAME_URL"   build_stage/game.nsp
           fetch Update "$UPDATE_URL" build_stage/update.nsp
+
+          echo "Contents of build_stage:"
+          ls -lh build_stage
+
+      - name: Build IPA
+        run: |
+          python3 scripts/build_ipa_from_nsp.py build_stage -k build_stage/prod.keys
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-ipa
+          path: |
+            **/*.ipa
+          if-no-files-found: warn
+
+      - name: Clean up sensitive files
+        if: always()
+        run: |
+          rm -rf build_stage
