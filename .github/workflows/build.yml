@@ -1,0 +1,48 @@
+name: Build NX2Apple IPA
+
+on:
+  workflow_dispatch: # Allows you to manually trigger the build from the GitHub Actions tab
+
+jobs:
+  build-game:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout NX2Apple Repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Toolchain & Dependencies
+        run: |
+          brew install xcodegen zstd spirv-cross
+          brew install --cask dotnet-sdk
+          python3 -m pip install lz4 capstone fonttools backports.zstd
+
+      - name: Securely Download Game, Update, and Keys
+        env:
+          GAME_URL: ${{ secrets.Game_URL }}
+          UPDATE_URL: ${{ secrets.Update_URL }}
+          KEYS_URL: ${{ secrets.Keys_URL }}
+        run: |
+          mkdir -p build_stage
+          
+          echo "Fetching prod.keys..."
+          curl -L -o build_stage/prod.keys "$KEYS_URL"
+          
+          echo "Fetching Base Game NSP..."
+          curl -L -o build_stage/game.nsp "$GAME_URL"
+          
+          echo "Fetching Update NSP..."
+          curl -L -o build_stage/update.nsp "$UPDATE_URL"
+
+      - name: Run Build and Packaging Script
+        run: |
+          python3 scripts/build_ipa_from_nsp.py build_stage -k build_stage/prod.keys
+
+      - name: Archive and Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: NX2Apple-Game-Package
+          path: |
+            *.ipa
+            build_stage/romfs/
+          if-no-files-found: warn
