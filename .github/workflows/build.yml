@@ -14,6 +14,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      # Enable this only if the script lives in a different repo.
+      # Replace OWNER/REPO and the path in the Build step below.
+      # - name: Checkout script repo
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: OWNER/REPO
+      #     path: script_repo
+      #     token: ${{ secrets.GH_PAT }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -46,7 +55,6 @@ jobs:
               exit 1
             fi
 
-            # Works for /d/ID/view links and uc?id=ID / download?id=ID links
             local id
             id=$(echo "$url" | sed -nE 's#.*/d/([A-Za-z0-9_-]+).*#\1#p; s#.*[?&]id=([A-Za-z0-9_-]+).*#\1#p' | head -n1)
             if [ -z "$id" ]; then
@@ -57,48 +65,4 @@ jobs:
 
             gdown "https://drive.google.com/uc?id=$id" -O "$out"
 
-            if head -c 1024 "$out" | grep -qiE '<html|<!doctype'; then
-              echo "::error::$name downloaded as an HTML page, not the real file"
-              exit 1
-            fi
-            ls -lh "$out"
-          }
-
-          fetch Keys   "$KEYS_URL"   build_stage/prod.keys
-          fetch Game   "$GAME_URL"   build_stage/game.nsp
-          fetch Update "$UPDATE_URL" build_stage/update.nsp
-
-          echo "Contents of build_stage:"
-          ls -lh build_stage
-
-      - name: Build IPA
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Use scripts/build_ipa_from_nsp.py if present, otherwise search the repo
-          SCRIPT="scripts/build_ipa_from_nsp.py"
-          if [ ! -f "$SCRIPT" ]; then
-            SCRIPT=$(find . -iname "build_ipa_from_nsp.py" -not -path "./.git/*" | head -n1)
-          fi
-          if [ -z "$SCRIPT" ] || [ ! -f "$SCRIPT" ]; then
-            echo "::error::build_ipa_from_nsp.py is not in this commit. Check it is committed, not gitignored, and that the right branch/submodule is checked out."
-            exit 1
-          fi
-
-          echo "Using script: $SCRIPT"
-          python3 "$SCRIPT" build_stage -k build_stage/prod.keys
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: built-ipa
-          path: |
-            **/*.ipa
-          if-no-files-found: warn
-
-      - name: Clean up sensitive files
-        if: always()
-        shell: bash
-        run: |
-          rm -rf build_stage
+            if head -c 1024 "$out" | grep -qiE '<html|
