@@ -1,57 +1,35 @@
-name: Build NX2Apple IPA
-
-on:
-  workflow_dispatch: # Allows you to manually trigger the build from the GitHub Actions tab
-
-jobs:
-  build-game:
-    runs-on: macos-latest
-    
-    steps:
-      - name: Checkout NX2Apple Repository
-        uses: actions/checkout@v4
-        with:
-          repository: LNPANDY/NX2Apple
-
-      - name: Install Build Toolchain & Dependencies
-        run: |
-          brew install xcodegen zstd spirv-cross glslang
-          brew install --cask dotnet-sdk
-          python3 -m pip install --break-system-packages lz4 capstone fonttools
-
-      - name: Securely Download Game, Update, and Keys
+      - name: Securely download game, update, and keys
         env:
           GAME_URL: ${{ secrets.Game_URL }}
           UPDATE_URL: ${{ secrets.Update_URL }}
           KEYS_URL: ${{ secrets.Keys_URL }}
         run: |
+          set -euo pipefail
+          pip install --quiet gdown
           mkdir -p build_stage
-          
-          echo "Fetching prod.keys..."
-          curl -L -o build_stage/prod.keys "$KEYS_URL"
-          
-          echo "Fetching Base Game NSP..."
-          curl -L -o build_stage/game.nsp "$GAME_URL"
-          
-          echo "Fetching Update NSP..."
-          curl -L -o build_stage/update.nsp "$UPDATE_URL"
 
-      - name: Inspect Downloaded Files (Debug)
-        run: |
-          echo "--- Directory contents and file sizes ---"
-          ls -lh build_stage/
-          echo "--- File types ---"
-          file build_stage/*
+          fetch() {
+            local name="$1" url="$2" out="$3"
+            if [ -z "$url" ]; then
+              echo "::error::Secret for $name is empty or not passed to this step"
+              exit 1
+            fi
+            # Works for /d/ID/view links and uc?id=ID / download?id=ID links
+            local id
+            id=$(echo "$url" | sed -nE 's#.*/d/([A-Za-z0-9_-]+).*#\1#p; s#.*[?&]id=([A-Za-z0-9_-]+).*#\1#p' | head -n1)
+            if [ -z "$id" ]; then
+              echo "::error::Could not find a Drive file ID in the $name secret"
+              exit 1
+            fi
+            echo "$name: file ID has ${#id} characters"
+            gdown "https://drive.google.com/uc?id=$id" -O "$out"
+            if head -c 1024 "$out" | grep -qiE '<html|<!doctype'; then
+              echo "::error::$name downloaded as an HTML page, not the real file"
+              exit 1
+            fi
+            ls -lh "$out"
+          }
 
-      - name: Run Build and Packaging Script
-        run: |
-          python3 scripts/build_ipa_from_nsp.py build_stage -k build_stage/prod.keys
-
-      - name: Archive and Upload Build Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: NX2Apple-Game-Package
-          path: |
-            *.ipa
-            build_stage/romfs/
-          if-no-files-found: warn
+          fetch Keys   "$KEYS_URL"   build_stage/prod.keys
+          fetch Game   "$GAME_URL"   build_stage/game.nsp
+          fetch Update "$UPDATE_URL" build_stage/update.nsp
